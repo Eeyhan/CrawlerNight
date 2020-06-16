@@ -20,6 +20,7 @@ from lxml.html import tostring
 from bs4 import BeautifulSoup, Comment
 from html import unescape
 from lxml import etree
+from functools import reduce
 import redis
 import pymongo
 from apscheduler.schedulers.gevent import GeventScheduler
@@ -28,6 +29,9 @@ import gc
 from queue import Queue
 import pytesseract
 from PIL import Image
+from hashlib import md5
+from fuzzywuzzy import fuzz,process
+import difflib
 
 requests.urllib3.disable_warnings()
 requests.adapters.DEFAULT_RETRIES = 5
@@ -592,6 +596,157 @@ class BaseCrawl(object):
             if area not in citys:
                 area = current_province
         return area
+
+    def deduplication_str(self,data):
+        """
+        对重复的字去重，不改变文字顺序
+        :param data: 待处理数据
+        :return:
+        """
+        temp = list(data)
+        end_data = []
+        for item in temp:
+            if item not in end_data:
+                end_data.append(item)
+        end_str = ''.join(end_data)
+        del temp,end_data
+        return end_str
+
+
+    def deduplication_tuple(self,data):
+        """
+        对重复的字去重，不改变文字顺序
+        :param data: 待处理数据
+        :return:
+        """
+        temp = list(data)
+        end_data = []
+        for item in temp:
+            if item not in end_data:
+                end_data.append(item)
+        end_tuple = tuple(end_data)
+        del temp, end_data
+        return end_tuple
+
+    def deduplication_list(self,data):
+        """
+        对重复的字去重，不改变文字顺序
+        :param data: 待处理数据
+        :return:
+        """
+        end_data = []
+        for item in data:
+            if item not in end_data:
+                end_data.append(item)
+        return end_data
+
+    def deduplication_normal(self,data):
+        """
+        对列表嵌套字典的去重，不改变文字顺序
+        :param data: 待处理数据
+        :return:
+        """
+        func = lambda x, y: x if y in x else x + [y]
+        li = reduce(func, [[], ] + data)
+        return li
+
+    def deduplication_normal_v2(self,data):
+        """
+        对列表嵌套字典的去重，不改变文字顺序
+        :param data: 待处理数据
+        :return:
+        """
+        temp_list = list(set([str(i) for i in data]))
+        li = [eval(i) for i in temp_list]
+        return li
+
+    def deduplication_normal_v3(self,data):
+        """
+        对列表嵌套字典的去重，不改变文字顺序
+        :param data: 待处理数据
+        :return:
+        """
+        return [dict(t) for t in set([tuple(d.items()) for d in data])]
+
+    def compare_file(self,file1,file2):
+        """
+        比对两个文件的重合度
+        :param file1:
+        :param file2:
+        :return:
+        """
+        f1 = open(file1,encoding='utf-8')
+        f1_cont = f1.read()
+        f1.close()
+        f2 = open(file2,encoding='utf-8')
+        f2_cont = f2.read()
+        f2.close()
+        temp_f1_cont = f1_cont.strip().replace('\n','').replace('\r','').replace(' ','')
+        temp_f2_cont = f2_cont.strip().replace('\n','').replace('\r','').replace(' ','')
+        temp_f1_cont = re.sub(r''',|\.|。|;|，|\?|？|\*|!|！|\.\.\.|【|】|"|：|“|”|、|\-|=|\(|\)|\\''','',temp_f1_cont)
+        temp_f2_cont = re.sub(r''',|\.|。|;|，|\?|？|\*|!|！|\.\.\.|【|】|"|：|“|”|、|\-|=|\(|\)|\\''','',temp_f2_cont)
+        if temp_f1_cont == temp_f2_cont:
+            return '100%'
+        else:
+            f1_he = md5()
+            f1_he.update(f1_cont)
+            f2_he = md5()
+            f2_he.update(f2_cont)
+            if f1_he.hexdigest() == f2_he.hexdigest():
+                return '100%'
+
+    def compare_data_fuzzy(self,data1,data2):
+        """
+        对文本段使用fuzzywuzzy库进行模糊匹配
+        :param data1:
+        :param data2:
+        :return:
+        """
+        flag = fuzz.ratio(data1,data2)
+        flag2 = fuzz.partial_ratio(data1,data2)
+        flag3 = fuzz.token_set_ratio(data1,data2)
+        end = (flag + flag2 + flag3) / 3
+        if end >= 80:
+            return int(end)
+
+    def compare_data_difflib(self,data1,data2):
+        """
+        对文本段使用difflib库进行模糊匹配
+        :param data1:
+        :param data2:
+        :return:
+        """
+        hd = difflib.HtmlDiff()
+        with open('htmlout.html', 'a+') as fo:
+            fo.write(hd.make_file(data1, data2))
+            fo.close()
+    def compare_data_simhash(self,data1,data2):
+        """
+        对文本使用simhash进行近似判断
+        :param data1:
+        :param data2:
+        :return:
+        """
+        # simhash
+        # 布隆过滤器
+
+
+    def clear_data(self,flag):
+        """
+        清洗数据
+        :param flag: 数据类型
+        :return:
+        """
+        if flag == 'str':  # 去除重复的字
+            pass
+        elif flag == 'tuple':
+            pass
+        elif flag == 'list':
+            pass
+        elif flag == 'dict':
+            pass
+
+
 
 
     def run(self):
