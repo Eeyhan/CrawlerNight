@@ -30,8 +30,10 @@ from queue import Queue
 import pytesseract
 from PIL import Image
 from hashlib import md5
-from fuzzywuzzy import fuzz,process
+from fuzzywuzzy import fuzz, process
+from simhash import Simhash
 import difflib
+from pybloom_live import BloomFilter, ScalableBloomFilter
 
 requests.urllib3.disable_warnings()
 requests.adapters.DEFAULT_RETRIES = 5
@@ -500,7 +502,7 @@ class BaseCrawl(object):
         conn.close()
         gc.collect()  # 不定期垃圾回收
 
-    def deduplicate(self,data):
+    def deduplicate(self, data):
         """
         去重
         :return:
@@ -519,19 +521,19 @@ class BaseCrawl(object):
         耗时组件
         :return:
         """
-        print('总共用时 %s'%(self.get_current_time() - self._start_time))
+        print('总共用时 %s' % (self.get_current_time() - self._start_time))
 
     def crawl(self):
         '业务逻辑'
         pass
 
-    def ocr_get_data(self,data):
+    def ocr_get_data(self, data):
         """
         ocr提取
         :param data: 图片名
         :return:
         """
-        img_path = os.path.join(BASE_DIR,data)
+        img_path = os.path.join(BASE_DIR, data)
         if not os.path.exists(img_path):
             raise ValueError('图片位置有误')
         if not os.path.isfile(img_path):
@@ -543,7 +545,7 @@ class BaseCrawl(object):
         if data:
             return data
 
-    def regex_data(self,part,data,flag):
+    def regex_data(self, part, data, flag):
         """
         正则匹配组件
         :param part: 正则表达式
@@ -551,18 +553,17 @@ class BaseCrawl(object):
         :param flag: 全部还是只是某一个
         :return:
         """
-        function = getattr(re,flag)
+        function = getattr(re, flag)
         if function:
-            data = function(part,data,re.S)
+            data = function(part, data, re.S)
             return data
-
 
     def error_level(self):
         """异常等级"""
         error_dict = {
-            0:'warning',
-            1:'error',
-            2:''
+            0: 'warning',
+            1: 'error',
+            2: ''
         }
 
     def freed_memory(self):
@@ -572,7 +573,7 @@ class BaseCrawl(object):
         """
         gc.collect()
 
-    def auth_area(self,area, source):
+    def auth_area(self, area, source):
         """
         验证匹配的地区是否属于当前省市来源网址
         :param area: 地区
@@ -597,7 +598,7 @@ class BaseCrawl(object):
                 area = current_province
         return area
 
-    def deduplication_str(self,data):
+    def deduplication_str(self, data):
         """
         对重复的字去重，不改变文字顺序
         :param data: 待处理数据
@@ -609,11 +610,10 @@ class BaseCrawl(object):
             if item not in end_data:
                 end_data.append(item)
         end_str = ''.join(end_data)
-        del temp,end_data
+        del temp, end_data
         return end_str
 
-
-    def deduplication_tuple(self,data):
+    def deduplication_tuple(self, data):
         """
         对重复的字去重，不改变文字顺序
         :param data: 待处理数据
@@ -628,7 +628,7 @@ class BaseCrawl(object):
         del temp, end_data
         return end_tuple
 
-    def deduplication_list(self,data):
+    def deduplication_list(self, data):
         """
         对重复的字去重，不改变文字顺序
         :param data: 待处理数据
@@ -640,7 +640,7 @@ class BaseCrawl(object):
                 end_data.append(item)
         return end_data
 
-    def deduplication_normal(self,data):
+    def deduplication_normal(self, data):
         """
         对列表嵌套字典的去重，不改变文字顺序
         :param data: 待处理数据
@@ -650,7 +650,7 @@ class BaseCrawl(object):
         li = reduce(func, [[], ] + data)
         return li
 
-    def deduplication_normal_v2(self,data):
+    def deduplication_normal_v2(self, data):
         """
         对列表嵌套字典的去重，不改变文字顺序
         :param data: 待处理数据
@@ -660,7 +660,7 @@ class BaseCrawl(object):
         li = [eval(i) for i in temp_list]
         return li
 
-    def deduplication_normal_v3(self,data):
+    def deduplication_normal_v3(self, data):
         """
         对列表嵌套字典的去重，不改变文字顺序
         :param data: 待处理数据
@@ -668,23 +668,23 @@ class BaseCrawl(object):
         """
         return [dict(t) for t in set([tuple(d.items()) for d in data])]
 
-    def compare_file(self,file1,file2):
+    def compare_file(self, file1, file2):
         """
         比对两个文件的重合度
         :param file1:
         :param file2:
         :return:
         """
-        f1 = open(file1,encoding='utf-8')
+        f1 = open(file1, encoding='utf-8')
         f1_cont = f1.read()
         f1.close()
-        f2 = open(file2,encoding='utf-8')
+        f2 = open(file2, encoding='utf-8')
         f2_cont = f2.read()
         f2.close()
-        temp_f1_cont = f1_cont.strip().replace('\n','').replace('\r','').replace(' ','')
-        temp_f2_cont = f2_cont.strip().replace('\n','').replace('\r','').replace(' ','')
-        temp_f1_cont = re.sub(r''',|\.|。|;|，|\?|？|\*|!|！|\.\.\.|【|】|"|：|“|”|、|\-|=|\(|\)|\\''','',temp_f1_cont)
-        temp_f2_cont = re.sub(r''',|\.|。|;|，|\?|？|\*|!|！|\.\.\.|【|】|"|：|“|”|、|\-|=|\(|\)|\\''','',temp_f2_cont)
+        temp_f1_cont = f1_cont.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+        temp_f2_cont = f2_cont.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+        temp_f1_cont = re.sub(r''',|\.|。|;|，|\?|？|\*|!|！|\.\.\.|【|】|"|：|“|”|、|\-|=|\(|\)|\\''', '', temp_f1_cont)
+        temp_f2_cont = re.sub(r''',|\.|。|;|，|\?|？|\*|!|！|\.\.\.|【|】|"|：|“|”|、|\-|=|\(|\)|\\''', '', temp_f2_cont)
         if temp_f1_cont == temp_f2_cont:
             return '100%'
         else:
@@ -695,21 +695,21 @@ class BaseCrawl(object):
             if f1_he.hexdigest() == f2_he.hexdigest():
                 return '100%'
 
-    def compare_data_fuzzy(self,data1,data2):
+    def compare_data_fuzzy(self, data1, data2):
         """
         对文本段使用fuzzywuzzy库进行模糊匹配
         :param data1:
         :param data2:
         :return:
         """
-        flag = fuzz.ratio(data1,data2)
-        flag2 = fuzz.partial_ratio(data1,data2)
-        flag3 = fuzz.token_set_ratio(data1,data2)
+        flag = fuzz.ratio(data1, data2)
+        flag2 = fuzz.partial_ratio(data1, data2)
+        flag3 = fuzz.token_set_ratio(data1, data2)
         end = (flag + flag2 + flag3) / 3
         if end >= 80:
             return int(end)
 
-    def compare_data_difflib(self,data1,data2):
+    def compare_data_difflib(self, data1, data2):
         """
         对文本段使用difflib库进行模糊匹配
         :param data1:
@@ -720,34 +720,49 @@ class BaseCrawl(object):
         with open('htmlout.html', 'a+') as fo:
             fo.write(hd.make_file(data1, data2))
             fo.close()
-    def compare_data_simhash(self,data1,data2):
+
+    def compare_data_simhash(self, data1, data2):
         """
         对文本使用simhash进行近似判断
         :param data1:
         :param data2:
         :return:
         """
-        # simhash
-        # 布隆过滤器
+        data1_sim = Simhash(data1)
+        data2_sim = Simhash(data2)
+        # 汉明距离
+        dis = data1_sim.distance(data2_sim)
+        if dis < 2:
+            return True
 
+    def bloom_data(self, data):
+        """
+        使用布隆过滤器对数据进行去重过滤
+        :param data:
+        :return:
+        """
+        bf = BloomFilter(capacity=100)
+        end_data = []
+        for item in data:
+            if item not in bf:
+                flag = bf.add(item)
+                if not flag:
+                    end_data.append(item)
+        return end_data
 
-    def clear_data(self,flag):
+    def clear_data(self, flag, data, *args, **kwargs):
         """
         清洗数据
         :param flag: 数据类型
+        :param data: 数据类型
         :return:
         """
         if flag == 'str':  # 去除重复的字
-            pass
+            self.deduplication_str(data)
         elif flag == 'tuple':
-            pass
+            self.deduplication_tuple(data)
         elif flag == 'list':
-            pass
-        elif flag == 'dict':
-            pass
-
-
-
+            self.deduplication_list(data)
 
     def run(self):
         """
@@ -788,3 +803,160 @@ class BaseCrawl(object):
             self.save_data_redis()
 
 
+def deduplicate(data):
+    """
+    具体的业务逻辑
+    :param data:
+    :return:
+    """
+    # 业务逻辑
+    return data
+
+def get_redis_data_split(counts):
+    """
+    分片获取redis里的数据
+    :param counts: redis数据库量总数
+    :return: 返回一个数组，内有每次的分片值
+    """
+    flag = counts / 3
+    if flag.is_integer():
+        return (int(flag), int(flag), int(flag))
+    else:
+        flag1 = int(flag)
+        temp = counts - flag1
+        flag2 = temp / 2
+        if flag2.is_integer():
+            return (flag1, int(flag2), int(flag2))
+        else:
+            new_flag2 = int(flag2)
+            flag3 = temp - new_flag2
+            return (flag1, new_flag2, flag3)
+
+
+def clear_db_data(pool=None, is_cover=True):
+    """
+    清洗数据库内的数据
+    :param pool: 数据库连接池
+    :param is_cover: 是否覆盖，默认是覆盖存储
+    :return:
+    """
+    if not pool:
+        conn = redis.Redis(connection_pool=POOL)
+        # conn = redis.Redis(connection_pool=FIRST_POOL)
+    else:
+        conn = redis.Redis(connection_pool=pool)
+    counts = conn.llen('data')
+    if not counts:
+        return
+    print('数据库内有 %s 个数据' % counts)
+    # data = conn.lrange('data', 0, -1)
+    tuples = get_redis_data_split(counts)  # 分片获取数据库内数据
+    if not tuples:
+        return
+    data = []
+    flag = pointer = 0
+    for item in tuples:
+        pointer += item
+        temp_data = conn.lrange('data', flag, pointer)
+        data.extend(temp_data)
+        flag = pointer
+    if len(data) == 0:
+        print('数据已经全部清洗过')
+        return
+    # 去重，去异常
+    new_data = deduplicate(data)
+    if not new_data:
+        return
+    del data, temp_data, tuples, flag, pointer
+    print('清洗出 %s 个数据' % len(new_data))
+    if is_cover:
+        # 覆盖保存
+        cover_data_redis(new_data)
+    else:
+        # 追加保存
+        save_data_redis(new_data)
+    conn.close()
+
+
+def read_db_data(pool=None):
+    """
+    读取数据库内的数据
+    :return:
+    """
+    if not pool:
+        conn = redis.Redis(connection_pool=FIRST_POOL)
+    else:
+        conn = redis.Redis(connection_pool=pool)
+    # data = conn.lrange('data', 0, -1)
+    counts = conn.llen('data')
+    tuples = get_redis_data_split(counts)  # 分片获取数据库内数据
+    if not tuples:
+        return
+    data = []
+    flag = pointer = 0
+    for item in tuples:
+        pointer += item
+        temp_data = conn.lrange('data', flag, pointer)
+        data.extend(temp_data)
+        flag = pointer
+    conn.close()
+    new_data = []
+    for item in data:
+        item = json.loads(item)
+        if item not in new_data:
+            new_data.append(item)
+    del flag, pointer, data
+    return new_data
+
+
+def move_delete_db_data(data, pool=None):
+    """
+    移动数据库内的数据到备份池,并把已备份过的数据删掉
+    :param data: 数据集
+    :param pool: redis数据库池
+    :return:
+    """
+    # if not pool:
+    #     conn = redis.Redis(connection_pool=SECOND_POOL)
+    # else:
+    #     conn = redis.Redis(connection_pool=pool)
+    # # 简单去重
+    # item_data = []
+    # for item in data:
+    #     if item not in item_data:
+    #         item_data.append(item)
+    # # 存入新的数据池
+    # for item in item_data:
+    #     conn.lpush('data', json.dumps(item))
+    # conn.close()
+    # 删除已备份数据
+    conn2 = redis.Redis(connection_pool=POOL)
+    conn2.delete('data')
+    conn2.close()
+    print('数据已备份')
+
+
+def save_data_redis(data):
+    """
+    保存
+    :return:
+    """
+    conn = redis.Redis(connection_pool=FIRST_POOL)
+    for item in data:
+        conn.lpush('data', json.dumps(item))
+    print('已保存')
+    conn.close()
+
+
+def cover_data_redis(data):
+    """
+    覆盖保存
+    :return:
+    """
+    # conn = redis.Redis(connection_pool=POOL)
+    conn = redis.Redis(connection_pool=FIRST_POOL)
+    conn.delete('data')
+    for item in data:
+        conn.lpush('data', json.dumps(item))
+    print('已保存')
+    conn.close()
