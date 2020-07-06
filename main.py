@@ -34,6 +34,7 @@ from fuzzywuzzy import fuzz, process
 from simhash import Simhash
 import difflib
 from pybloom_live import BloomFilter, ScalableBloomFilter
+import base64
 
 requests.urllib3.disable_warnings()
 requests.adapters.DEFAULT_RETRIES = 5
@@ -749,6 +750,29 @@ class BaseCrawl(object):
                 if not flag:
                     end_data.append(item)
         return end_data
+
+    def generate_base64(self,*args,**kwargs):
+        """
+        base64摘要
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        mds = kwargs.get('md5_str')
+        flag_str = kwargs.get('flag_str')
+        base64_str = mds + flag_str
+        end_str = base64.b64encode(base64_str.encode('utf-8'))
+        return end_str
+
+    def solve_base64(self,base_str):
+        """
+        base64解码
+        :param base_str:
+        :return:
+        """
+        solve_str = base64.b16decode(base_str)
+        return solve_str
+
 
     def clear_data(self, flag, data, *args, **kwargs):
         """
