@@ -218,6 +218,8 @@ class BaseCrawl(object):
             try:
                 # 拿到新的代理去请求
                 proxy = self.get_proxy()
+                headers = headers if headers else self.get_headers  # 错误请求后应该换下请求头，固定请求头除外
+                headers.update({'Connection': 'close'})
                 if data:
                     req = requests.post(url, headers=headers, data=data, verify=False, proxies=proxy,
                                         timeout=(3, 5))
