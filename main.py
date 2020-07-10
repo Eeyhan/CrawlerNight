@@ -186,29 +186,34 @@ class BaseCrawl(object):
             if key in data:
                 return True
 
-    def normal_request(self, url, data=None, is_solve=True, headers=None):
+    def request_normal(self, url, method='get', data=None, is_solve=True, headers=None, data_is_json=False):
         """
-        通用的请求函数
+        通用的请求参数
         :param url: 请求网址
+        :param method: 请求方式
         :param data: 请求参数
         :param is_solve: 是否需要对返回结果解码
         :param headers: 请求头，如果不带默认就是随机获取
+        :param data_is_json: 请求参数是否是个字典
         :return:
         """
         req = None
         proxy = self.get_proxy()
         try:
             headers = headers if headers else self.get_headers
-            headers.update({'Connection': 'close'})
-            if data:
-                req = requests.post(url, headers=headers, data=data, verify=False, proxies=proxy,
-                                    timeout=(3, 5))
+            if method.lower() == 'post' or data:
+                if data_is_json:
+                    req = requests.post(url, headers=headers, json=data, verify=False, proxies=proxy,
+                                        timeout=(3, 7))
+                else:
+                    req = requests.post(url, headers=headers, data=data, verify=False, proxies=proxy,
+                                        timeout=(3, 7))
             else:
-                req = requests.get(url, headers=headers, verify=False, proxies=proxy, timeout=(3, 5))
-        except Exception:
+                req = requests.get(url, headers=headers, verify=False, proxies=proxy, timeout=(3, 7))
+        except Exception as e:
+            print(e)
             headers = headers if headers else self.get_headers  # 错误请求后应该换下请求头，固定请求头除外
-            headers.update({'Connection': 'close'})
-            time.sleep(self.get_sleep_time_v2())
+            time.sleep(self.get_sleep_time())
             # 先判断是否还有代理,删除上次出错的代理
             if proxy and self.proxies and proxy in self.proxies:
                 self.proxies.remove(proxy)
@@ -218,15 +223,17 @@ class BaseCrawl(object):
             try:
                 # 拿到新的代理去请求
                 proxy = self.get_proxy()
-                headers = headers if headers else self.get_headers  # 错误请求后应该换下请求头，固定请求头除外
-                headers.update({'Connection': 'close'})
-                if data:
-                    req = requests.post(url, headers=headers, data=data, verify=False, proxies=proxy,
-                                        timeout=(3, 5))
+                if method.lower() == 'post' or data:
+                    if data_is_json:
+                        req = requests.post(url, headers=headers, json=data, verify=False, proxies=proxy,
+                                            timeout=(3, 7))
+                    else:
+                        req = requests.post(url, headers=headers, data=data, verify=False, proxies=proxy,
+                                            timeout=(3, 7))
                 else:
-                    req = requests.get(url, headers=headers, verify=False, proxies=proxy, timeout=(3, 5))
-            except Exception:
-                pass
+                    req = requests.get(url, headers=headers, verify=False, proxies=proxy, timeout=(3, 7))
+            except Exception as s:
+                print(s)
         if req and req.status_code == 200:
             if is_solve:  # 需要解析，返回已解析过的数据
                 res = self.solve_response(req)
@@ -234,6 +241,7 @@ class BaseCrawl(object):
                     return res
             else:  # 不需要解析直接返回response对象
                 return req
+        time.sleep(self.get_sleep_time_v2())
 
     def solve_response(self, response, url=None):
         """
