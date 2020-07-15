@@ -761,7 +761,7 @@ class BaseCrawl(object):
                     end_data.append(item)
         return end_data
 
-    def generate_base64(self,*args,**kwargs):
+    def generate_base64(self, *args, **kwargs):
         """
         base64摘要
         :param args:
@@ -774,7 +774,7 @@ class BaseCrawl(object):
         end_str = base64.b64encode(base64_str.encode('utf-8'))
         return end_str
 
-    def solve_base64(self,base_str):
+    def solve_base64(self, base_str):
         """
         base64解码
         :param base_str:
@@ -782,7 +782,6 @@ class BaseCrawl(object):
         """
         solve_str = base64.b16decode(base_str)
         return solve_str
-
 
     def clear_data(self, flag, data, *args, **kwargs):
         """
@@ -845,6 +844,7 @@ def deduplicate(data):
     """
     # 业务逻辑
     return data
+
 
 def get_redis_data_split(counts):
     """
@@ -910,6 +910,46 @@ def clear_db_data(pool=None, is_cover=True):
         # 追加保存
         save_data_redis(new_data)
     conn.close()
+
+
+def get_new_time(pub_date, days=LANG_DAYS):
+    """
+    获取最近有效时间内可用的数据
+    :param pub_date: 目标日期时间
+    :param days: 日期期限
+    :return:
+    """
+    if '月' in pub_date or '日' in pub_date or '年' in pub_date:
+        pub_date = pub_date.replace('月', '-').replace('日', '').replace('年', '-')
+        if pub_date.count('-') == 1:  # 没有年份，补齐年份
+            now_year = datetime.now().year
+            pub_date = str(now_year) + '-' + pub_date
+    if not pub_date:
+        return
+    if isinstance(pub_date, str):
+        if re.search(r'[\u4e00-\u9fa5]', pub_date):  # 如果是中文字，跳出
+            return
+    today = datetime.now()
+    mount = timedelta(days=days)
+    long = today - mount  # 按设定的最久时间
+    res = ''
+    # 时间格式化
+    if isinstance(pub_date, int):  # 是时间戳
+        time_array = time.localtime(pub_date)
+        pub_date = time.strftime('%Y-%m-%d', time_array)
+    if ':' in pub_date:  # 是格式化后的时间
+        if pub_date.count(':') == 2:
+            res = datetime.strptime(pub_date, '%Y-%m-%d %H:%M:%S')
+        else:
+            res = datetime.strptime(pub_date, '%Y-%m-%d %H:%M')
+    elif '-' in pub_date:
+        res = datetime.strptime(pub_date, '%Y-%m-%d')
+    if not res:
+        return False
+    if long < res:
+        return True  # 符合
+    else:
+        return False  # 不符合
 
 
 def read_db_data(pool=None):
