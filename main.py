@@ -911,19 +911,19 @@ def clear_db_data(pool=None, is_cover=True):
         save_data_redis(new_data)
     conn.close()
 
-
-def get_new_time(pub_date, days=LANG_DAYS):
+def get_new_time(pub_date, days=30):
     """
     获取最近有效时间内可用的数据
     :param pub_date: 目标日期时间
     :param days: 日期期限
     :return:
     """
-    if '月' in pub_date or '日' in pub_date or '年' in pub_date:
-        pub_date = pub_date.replace('月', '-').replace('日', '').replace('年', '-')
-        if pub_date.count('-') == 1:  # 没有年份，补齐年份
-            now_year = datetime.now().year
-            pub_date = str(now_year) + '-' + pub_date
+    if isinstance(pub_date,str):
+        if '月' in pub_date or '日' in pub_date or '年' in pub_date:
+            pub_date = pub_date.replace('月', '-').replace('日', '').replace('年', '-')
+            if pub_date.count('-') == 1:  # 没有年份，补齐年份
+                now_year = datetime.now().year
+                pub_date = str(now_year) + '-' + pub_date
     if not pub_date:
         return
     if isinstance(pub_date, str):
@@ -950,7 +950,6 @@ def get_new_time(pub_date, days=LANG_DAYS):
         return True  # 符合
     else:
         return False  # 不符合
-
 
 def read_db_data(pool=None):
     """
